@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logistics Price Analyzer - Nova Post Edition</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Dependencies for Recharts -->
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+    
+    <!-- Recharts -->
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+        const { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } = window.Recharts;
+
+        // --- ICONS ---
+        const IconUpload = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>);
+        const IconFileText = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>);
+        const IconFilter = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>);
+        const IconTarget = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>);
+        const IconTrendingUp = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>);
+        const IconBarChart = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>);
+        const IconPercent = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>);
+
+        // --- TRANSLATIONS ---
+
+        const TRANSLATIONS = {
+            ua: {
+                title: "Логістичний Бенчмарк",
+                upload_title: "Аналіз Конкурентів",
+                upload_desc: "Завантажте CSV файл (Origin, Destination, вага, Carrier, Contract).",
+                select_file: "Вибрати файл",
+                use_demo: "Використати демо-дані",
+                
+                // Header Controls
+                route_label: "Маршрут:",
+                target_label: "Аналіз для:",
+                
+                // KPIs
+                kpi_my_price: "Моя ціна",
+                kpi_position: "Позиція на ринку",
+                kpi_gap: "Відхилення від ринку",
+                kpi_avg: "Середня по ринку",
+                
+                // KPI Subtexts
+                kpi_position_sub: "за дешевизною",
+                kpi_gap_sub_cheap: "дешевше середнього",
+                kpi_gap_sub_exp: "дорожче середнього",
+                kpi_avg_sub: "всі конкуренти",
+
+                // Charts
+                chart_line_title: "Динаміка ринку",
+                chart_line_sub: "Червона лінія - ваш тариф, сірі - конкуренти.",
+                chart_bar_title: "Розподіл цін",
+                chart_bar_sub: "Ваша позиція серед конкурентів.",
+                
+                // Table
+                table_title: "Детальний зріз для",
+                col_carrier: "Перевізник",
+                col_contract: "Контракт",
+                
+                badge_dev: "Developed by Roman Novobranets",
+                price: "Ціна"
+            },
+            en: {
+                title: "Logistics Benchmark",
+                upload_title: "Competitor Analysis",
+                upload_desc: "Upload CSV file (Origin, Destination, weights, Carrier, Contract).",
+                select_file: "Select File",
+                use_demo: "Use Demo Data",
+                
+                route_label: "Route:",
+                target_label: "Analyze for:",
+                
+                kpi_my_price: "My Price",
+                kpi_position: "Market Position",
+                kpi_gap: "Market Deviation",
+                kpi_avg: "Market Average",
+                
+                kpi_position_sub: "by price rank",
+                kpi_gap_sub_cheap: "below average",
+                kpi_gap_sub_exp: "above average",
+                kpi_avg_sub: "all competitors",
+
+                chart_line_title: "Market Dynamics",
+                chart_line_sub: "Red line - your rate, gray - competitors.",
+                chart_bar_title: "Price Distribution",
+                chart_bar_sub: "Your rank among competitors.",
+                
+                table_title: "Detailed view for",
+                col_carrier: "Carrier",
+                col_contract: "Contract",
+                
+                badge_dev: "Developed by Roman Novobranets",
+                price: "Price"
+            }
+        };
+
+        // --- UTILITIES ---
+
+        const parseCSV = (text) => {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return [];
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            return lines.slice(1).map(line => {
+                const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(val => val.trim().replace(/^"|"$/g, ''));
+                const row = {};
+                headers.forEach((header, index) => { if (header) row[header] = values[index] || ""; });
+                return row;
+            });
+        };
+
+        const generateMockData = () => {
+            return parseCSV(`Origin,Destination,1 kg,2 kg,5 kg,10 kg,20 kg,30 kg,Carrier,Contract
+LT,DE,12.5,14.0,18.5,25.0,40.0,55.0,DHL,Direct
+LT,DE,10.0,12.0,19.0,28.0,45.0,60.0,DPD,Direct
+LT,DE,11.5,13.0,17.5,24.0,38.0,52.0,Nova Post,Direct
+LT,DE,14.0,16.0,21.0,29.0,44.0,59.0,UPS,Direct
+LT,FR,15.0,17.0,22.0,30.0,48.0,-,UPS,Direct
+LT,FR,14.0,16.0,21.0,28.0,46.0,62.0,Nova Post,Direct
+LT,PL,8.0,9.5,12.0,15.0,20.0,25.0,InPost,Direct
+LT,PL,8.5,9.0,11.5,14.5,19.5,24.0,Nova Post,Direct`);
+        };
+
+        // --- COMPONENTS ---
+
+        const Card = ({ children, className = "" }) => (
+            <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>
+        );
+
+        const Badge = ({ type }) => {
+            const isDirect = type?.toLowerCase().includes('direct');
+            return (
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    isDirect ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-purple-100 text-purple-800 border border-purple-200'
+                }`}>
+                    {type || 'Unknown'}
+                </span>
+            );
+        };
+
+        const StatCard = ({ title, value, subtext, icon: Icon, colorClass, isNegative = false }) => (
+            <Card className="p-4 flex items-start space-x-4">
+                <div className={`p-3 rounded-lg ${colorClass} bg-opacity-10`}>
+                    <Icon className={`w-6 h-6 ${colorClass.replace('bg-', 'text-')}`} />
+                </div>
+                <div>
+                    <p className="text-sm font-medium text-slate-500">{title}</p>
+                    <h3 className={`text-2xl font-bold ${isNegative ? 'text-red-600' : 'text-slate-800'}`}>{value}</h3>
+                    {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
+                </div>
+            </Card>
+        );
+
+        // --- MAIN APP ---
+
+        function App() {
+            const [rawData, setRawData] = useState([]);
+            const [isDataLoaded, setIsDataLoaded] = useState(false);
+            const [selectedRoute, setSelectedRoute] = useState('');
+            const [weightMetric, setWeightMetric] = useState('10 kg');
+            const [targetCarrier, setTargetCarrier] = useState(''); // The user's company
+            const [lang, setLang] = useState('ua');
+
+            const t = (key) => TRANSLATIONS[lang][key] || key;
+
+            const processData = (parsedData) => {
+                setRawData(parsedData);
+                setIsDataLoaded(true);
+                if (parsedData.length > 0) {
+                    const first = parsedData[0];
+                    setSelectedRoute(`${first.Origin}-${first.Destination}`);
+                    // Try to guess carrier or set first
+                    const carriers = Array.from(new Set(parsedData.map(r => r.Carrier)));
+                    if (carriers.includes("Nova Post")) setTargetCarrier("Nova Post");
+                    else setTargetCarrier(carriers[0]);
+                }
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => processData(parseCSV(e.target.result));
+                reader.readAsText(file);
+            };
+
+            // --- COMPUTED DATA ---
+
+            const routes = useMemo(() => {
+                const unique = new Set(rawData.map(row => `${row.Origin}-${row.Destination}`));
+                return Array.from(unique).sort();
+            }, [rawData]);
+
+            const carriersList = useMemo(() => {
+                const unique = new Set(rawData.map(row => row.Carrier));
+                return Array.from(unique).sort();
+            }, [rawData]);
+
+            const weightColumns = useMemo(() => {
+                if (rawData.length === 0) return [];
+                return Object.keys(rawData[0]).filter(k => k.toLowerCase().includes('kg'));
+            }, [rawData]);
+
+            useEffect(() => {
+                if (weightColumns.length > 0 && !weightColumns.includes(weightMetric)) {
+                    setWeightMetric(weightColumns[0]);
+                }
+            }, [weightColumns, weightMetric]);
+
+            const filteredData = useMemo(() => {
+                if (!selectedRoute) return [];
+                const [origin, dest] = selectedRoute.split('-');
+                return rawData.filter(row => row.Origin === origin && row.Destination === dest).map(row => {
+                    const cleanRow = { ...row };
+                    weightColumns.forEach(w => {
+                        const val = row[w];
+                        const numVal = parseFloat(val);
+                        cleanRow[w] = (val === '-' || val === '' || val === null || isNaN(numVal)) ? null : numVal;
+                    });
+                    return cleanRow;
+                });
+            }, [rawData, selectedRoute, weightColumns]);
+
+            // Chart Data
+            const lineChartData = useMemo(() => {
+                if (filteredData.length === 0) return [];
+                return weightColumns.map(weight => {
+                    const dataPoint = { name: weight };
+                    filteredData.forEach(row => dataPoint[row.Carrier] = row[weight]); // Using Carrier name as key
+                    return dataPoint;
+                });
+            }, [filteredData, weightColumns]);
+
+            const barChartData = useMemo(() => {
+                return filteredData
+                    .map(row => ({
+                        name: row.Carrier,
+                        price: row[weightMetric],
+                        contract: row.Contract,
+                        isTarget: row.Carrier === targetCarrier
+                    }))
+                    .sort((a, b) => (a.price || 9999) - (b.price || 9999));
+            }, [filteredData, weightMetric, targetCarrier]);
+
+            // Competitor Metrics
+            const stats = useMemo(() => {
+                if (barChartData.length === 0) return null;
+                
+                const validPrices = barChartData.filter(d => d.price !== null && d.price !== undefined && !isNaN(d.price));
+                if (validPrices.length === 0) return null;
+
+                const prices = validPrices.map(d => d.price);
+                const avg = prices.reduce((a,b) => a+b, 0) / prices.length;
+                
+                // My stats
+                const myEntry = validPrices.find(d => d.name === targetCarrier);
+                const myPrice = myEntry ? myEntry.price : null;
+                
+                // Rank
+                const rankIndex = validPrices.findIndex(d => d.name === targetCarrier);
+                const rank = rankIndex !== -1 ? rankIndex + 1 : '-';
+                const total = validPrices.length;
+
+                // Gap
+                let gapPercent = 0;
+                let gapValue = 0;
+                if (myPrice) {
+                    gapValue = myPrice - avg;
+                    gapPercent = ((myPrice - avg) / avg) * 100;
+                }
+
+                return { avg, myPrice, rank, total, gapPercent, gapValue };
+            }, [barChartData, targetCarrier]);
+
+            const colors = ["#94a3b8", "#cbd5e1", "#64748b"]; // Grayscale for competitors
+
+            // --- HEADER ---
+            const Header = () => (
+                <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex items-center gap-3 w-full md:w-auto">
+                            <div className="bg-red-600 text-white p-2 rounded-lg shadow-sm">
+                                <IconTarget className="w-5 h-5" />
+                            </div>
+                            <h1 className="text-xl font-bold text-slate-800 tracking-tight">{t('title')}</h1>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                            <div className="hidden lg:flex bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold border border-blue-100 items-center shadow-sm">
+                                {t('badge_dev')}
+                            </div>
+
+                            <div className="flex bg-slate-100 p-1 rounded-lg">
+                                <button onClick={() => setLang('ua')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${lang === 'ua' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>UA</button>
+                                <button onClick={() => setLang('en')} className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${lang === 'en' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>EN</button>
+                            </div>
+
+                            {isDataLoaded && (
+                                <>
+                                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                                        <div className="flex items-center px-2 gap-2 text-slate-600">
+                                            <IconTarget className="w-4 h-4 text-red-500" />
+                                            <span className="hidden sm:inline text-xs font-bold uppercase">{t('target_label')}</span>
+                                        </div>
+                                        <select value={targetCarrier} onChange={(e) => setTargetCarrier(e.target.value)} className="bg-transparent border-none text-sm font-bold text-slate-800 focus:ring-0 cursor-pointer">
+                                            {carriersList.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                                        <div className="flex items-center px-2 gap-2 text-slate-600">
+                                            <IconFilter className="w-4 h-4" />
+                                        </div>
+                                        <select value={selectedRoute} onChange={(e) => setSelectedRoute(e.target.value)} className="bg-transparent border-none text-sm font-semibold text-slate-700 focus:ring-0 cursor-pointer max-w-[150px]">
+                                            {routes.map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </header>
+            );
+
+            // --- FOOTER ---
+            const Footer = () => (
+                <footer className="mt-auto py-8 bg-slate-50 border-t border-slate-200">
+                    <div className="max-w-7xl mx-auto px-4 text-center text-slate-400 text-sm">
+                        <p>© 2026 Roman Novobranets. All rights reserved.</p>
+                        <div className="md:hidden mt-4 inline-block bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold border border-blue-100">
+                             {t('badge_dev')}
+                        </div>
+                    </div>
+                </footer>
+            );
+
+            // --- LOAD SCREEN ---
+            if (!isDataLoaded) {
+                return (
+                    <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
+                        <Header />
+                        <main className="flex-grow flex flex-col items-center justify-center p-4">
+                            <div className="max-w-md w-full text-center">
+                                <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+                                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                        <IconUpload className="w-8 h-8" />
+                                    </div>
+                                    <h1 className="text-2xl font-bold text-slate-800 mb-2">{t('upload_title')}</h1>
+                                    <p className="text-slate-500 mb-8">{t('upload_desc')}</p>
+                                    <label className="block w-full cursor-pointer group">
+                                        <span className="sr-only">{t('select_file')}</span>
+                                        <div className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 text-white font-semibold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl transition-all">
+                                            <IconUpload className="w-5 h-5" />
+                                            {t('select_file')}
+                                        </div>
+                                        <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden"/>
+                                    </label>
+                                    <div className="mt-6 pt-6 border-t border-slate-100">
+                                        <button onClick={() => processData(generateMockData())} className="text-sm text-slate-400 hover:text-blue-600 font-medium transition-colors">
+                                            {t('use_demo')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                        <Footer />
+                    </div>
+                );
+            }
+
+            // --- DASHBOARD ---
+            return (
+                <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
+                    <Header />
+
+                    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8 flex-grow w-full">
+                        {stats && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <StatCard 
+                                    title={t('kpi_my_price')}
+                                    value={stats.myPrice ? `${stats.myPrice.toFixed(2)} €` : 'N/A'}
+                                    subtext={`${t('carrier_label')} ${targetCarrier}`}
+                                    icon={IconTarget}
+                                    colorClass="bg-red-500 text-red-600"
+                                />
+                                <StatCard 
+                                    title={t('kpi_position')}
+                                    value={`#${stats.rank} / ${stats.total}`}
+                                    subtext={t('kpi_position_sub')}
+                                    icon={IconBarChart}
+                                    colorClass="bg-blue-500 text-blue-600"
+                                />
+                                <StatCard 
+                                    title={t('kpi_gap')}
+                                    value={stats.gapPercent > 0 ? `+${stats.gapPercent.toFixed(1)}%` : `${stats.gapPercent.toFixed(1)}%`}
+                                    subtext={stats.gapPercent > 0 ? t('kpi_gap_sub_exp') : t('kpi_gap_sub_cheap')}
+                                    icon={IconPercent}
+                                    isNegative={stats.gapPercent > 0} // Red if more expensive
+                                    colorClass={stats.gapPercent > 0 ? "bg-orange-100 text-orange-600" : "bg-green-100 text-green-600"}
+                                />
+                                <StatCard 
+                                    title={t('kpi_avg')}
+                                    value={`${stats.avg.toFixed(2)} €`}
+                                    subtext={`${t('weight_label')} ${weightMetric}`}
+                                    icon={IconTrendingUp}
+                                    colorClass="bg-slate-500 text-slate-600"
+                                />
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card className="p-6">
+                                <div className="mb-6">
+                                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                        <IconTrendingUp className="w-5 h-5 text-blue-500" />
+                                        {t('chart_line_title')}
+                                    </h2>
+                                    <p className="text-sm text-slate-500">{t('chart_line_sub')}</p>
+                                </div>
+                                <div className="h-80 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={lineChartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis dataKey="name" stroke="#64748b" tick={{fontSize: 12}} />
+                                            <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => `€${val}`} />
+                                            <Tooltip formatter={(value, name) => [`€${value}`, name]} contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                            <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                                            {/* Render lines dynamically. Target carrier red, others gray */}
+                                            {filteredData.map((row, idx) => (
+                                                <Line 
+                                                    key={idx}
+                                                    type="monotone" 
+                                                    dataKey={row.Carrier} 
+                                                    stroke={row.Carrier === targetCarrier ? "#dc2626" : "#cbd5e1"} 
+                                                    strokeWidth={row.Carrier === targetCarrier ? 3 : 2}
+                                                    dot={{ r: row.Carrier === targetCarrier ? 5 : 3 }}
+                                                    activeDot={{ r: 6 }}
+                                                    zIndex={row.Carrier === targetCarrier ? 10 : 1}
+                                                />
+                                            ))}
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </Card>
+
+                            <Card className="p-6">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                                    <div>
+                                        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <IconBarChart className="w-4 h-4 text-purple-500" />
+                                            {t('chart_bar_title')}
+                                        </h2>
+                                        <p className="text-sm text-slate-500">{t('chart_bar_sub')}</p>
+                                    </div>
+                                    <select 
+                                        value={weightMetric}
+                                        onChange={(e) => setWeightMetric(e.target.value)}
+                                        className="bg-slate-50 border border-slate-200 text-sm rounded-md py-1 px-3 focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        {weightColumns.map(w => <option key={w} value={w}>{w}</option>)}
+                                    </select>
+                                </div>
+                                <div className="h-80 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={barChartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                                            <XAxis type="number" stroke="#64748b" tickFormatter={(val) => `€${val}`} />
+                                            <YAxis dataKey="name" type="category" width={80} stroke="#64748b" tick={{fontSize: 12}} />
+                                            <Tooltip 
+                                                cursor={{fill: '#f1f5f9'}}
+                                                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                                                formatter={(value) => [`€${value}`, t('price')]}
+                                            />
+                                            <Bar dataKey="price" radius={[0, 4, 4, 0]}>
+                                                {barChartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.isTarget ? '#dc2626' : '#94a3b8'} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </Card>
+                        </div>
+
+                        <Card className="overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                    <IconFileText className="w-5 h-5 text-slate-400" />
+                                    {t('table_title')} {selectedRoute}
+                                </h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500 font-medium">
+                                        <tr>
+                                            <th className="px-6 py-3">{t('col_carrier')}</th>
+                                            <th className="px-6 py-3">{t('col_contract')}</th>
+                                            {weightColumns.map(w => (
+                                                <th key={w} className="px-6 py-3 text-right">{w}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredData.map((row, idx) => (
+                                            <tr key={idx} className={`transition-colors ${row.Carrier === targetCarrier ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
+                                                <td className={`px-6 py-4 font-medium ${row.Carrier === targetCarrier ? 'text-red-700 font-bold' : 'text-slate-900'}`}>{row.Carrier}</td>
+                                                <td className="px-6 py-4">
+                                                    <Badge type={row.Contract} />
+                                                </td>
+                                                {weightColumns.map(w => {
+                                                    const val = row[w];
+                                                    return (
+                                                        <td key={w} className={`px-6 py-4 text-right font-mono text-slate-600`}>
+                                                            {val !== null ? `€${val.toFixed(2)}` : <span className="text-slate-300">-</span>}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    </main>
+                    <Footer />
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
